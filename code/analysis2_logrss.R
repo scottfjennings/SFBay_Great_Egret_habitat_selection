@@ -9,8 +9,6 @@ library(amt)
 library(lubridate)
 library(here)
 library(AICcmodavg)
-library(gridExtra)
-library(RColorBrewer)
 
 options(scipen = 999)
 
@@ -22,7 +20,7 @@ gregs <- read.csv(here("data/gregs.csv")) %>%
 # read data; from analysis_1_prep_data.R ----
 # add human readable habitat names and clean
 
-# with only end habitat values
+# with only end habitat values ----
 greg_steps_habitat <- readRDS(here("model_objects/amt_bursts/greg_tracks_30min")) %>% 
   right_join(gregs) %>% 
   full_join(., read.csv(here("data/habitat_names_groups.csv")) %>% dplyr::select(habitat.name, "land.cover" = habitat.num) %>% distinct()) %>% 
@@ -31,7 +29,7 @@ greg_steps_habitat <- readRDS(here("model_objects/amt_bursts/greg_tracks_30min")
   mutate(habitat.name = as.factor(habitat.name),
          habitat.name = relevel(habitat.name, "Open Water"))
 
-# with start and end habitat values
+# no run - with start and end habitat values ----
 greg_steps_habitat <- readRDS(here("model_objects/amt_bursts/greg_tracks_30min")) %>% 
   full_join(., read.csv(here("data/habitat_names_groups.csv")) %>% dplyr::select(habitat.name.start = habitat.name, habitat.start = Value)) %>% 
   full_join(., read.csv(here("data/habitat_names_groups.csv")) %>% dplyr::select(habitat.name.end = habitat.name, habitat.end = Value)) %>% 
@@ -76,57 +74,39 @@ greg_steps_habitat %>%
 # see also Signer, J., J. Fieberg, and T. Avgar. 2019. Animal movement tools (amt): R package for managing tracking data and conducting habitat selection analyses. Ecology and Evolution 9:880–890.
 
 # habitat - does relative selection differ between habitats?
-fit_hab <- function(zbird) {
-hab <- greg_steps_habitat %>% 
+fit_mods <- function(zbird) {
+dat <- greg_steps_habitat %>% 
   mutate(cos_ta_ = cos(ta_),
          log_sl_ = log(sl_)) %>% 
-  filter(bird == zbird) %>% 
+  filter(bird == zbird) 
+
+hab <- dat %>% 
   fit_issf(case_ ~ habitat.name + 
              sl_ + log_sl_ + cos_ta_ + 
              strata(step_id_), model = TRUE)
 
-# saveRDS(hab, paste("model_objects/fitted/", zbird, "_hab", sep = ""))
-return(hab)
+int <- dat %>%  
+  fit_issf(case_ ~ sl_ + log_sl_ + cos_ta_ + 
+             strata(step_id_), model = TRUE)
+
+lrt_p <- data.frame(bird = zbird,
+                    lrt.p = pchisq(2 * (as.numeric(logLik(hab$model)) - as.numeric(logLik(int$model))), df = 1, lower.tail = FALSE))
+
+
+
+mods <- list(hab = hab,
+             int = int,
+             lrt = lrt_p)
+
+return(mods)
 }
 
 # zz <- fit_hab("GREG_2")
 
 # save it as an object so errors can be examined
-fitted_hab <- map(gregs$bird, safely(fit_hab))
-names(fitted_hab) <- gregs$bird
-map(fitted_hab, "error")
-
-
-# no habitat - is relative selection the same among habitats? this is roughly the intercept only model ----
-fit_intercept <- function(zbird) {
-int <- greg_steps_habitat %>% 
-  filter(bird == zbird) %>% 
-  fit_issf(case_ ~ sl_ + log_sl_ + cos_ta_ + 
-             strata(step_id_), model = TRUE)
-
-# 
-saveRDS(int, paste("model_objects/fitted/", zbird, "_int", sep = ""))
-}
-
-
-# save it as an object so errors can be examined
-fitted_int <- map(gregs$bird, safely(fit_intercept))
-names(fitted_int) <- gregs$bird
-map(fitted_int, "error")
-
-
-# likelihood ratio test for each bird ----
-
-greg_lrt <- function(zbird) {
-  hab <- readRDS(here(paste("model_objects/fitted/", zbird, "_hab", sep = "")))
-  int <- readRDS(here(paste("model_objects/fitted/", zbird, "_int", sep = "")))
-  
-lrt_p <- data.frame(bird = zbird,
-                    lrt.p = pchisq(2 * (as.numeric(logLik(hab$model)) - as.numeric(logLik(int$model))), df = 1, lower.tail = FALSE))
-  
-}
-
-lrt_results <- map_df(gregs$bird, greg_lrt)
+fitted_mods <- map(gregs$bird, safely(fit_mods))
+names(fitted_mods) <- gregs$bird
+map(fitted_mods, "error")
 
 
 
