@@ -18,15 +18,18 @@ options(scipen = 999)
 land_cover <-raster("C:/Users/scott.jennings/OneDrive - Audubon Canyon Ranch/Projects/general_data_sources/nlcd/merged_cent_ca_nldc2019/merged_cent_ca_nldc2019_utm.tiff")
  
 # small helper df to reclassify habitat raster to fewer classes
-rcl <- cbind(c(0, 11, 12, 21, 22, 23, 24, 31, 41, 42, 43, 52, 71, 81, 82, 90, 95), 
-             c(1, 2, 1, 3, 3, 3, 3, 1, 4, 4, 4, 4, 5, 5, 5, 6, 6)) 
+#rcl <- cbind(c(0, 11, 12, 21, 22, 23, 24, 31, 41, 42, 43, 52, 71, 81, 82, 90, 95), 
+#             c(1, 2, 1, 3, 3, 3, 3, 1, 4, 4, 4, 4, 5, 5, 5, 6, 6)) 
 
-land_cover_key <- data.frame(lc.num = 1:6,
-                             lc.name = c("other, unclassified", "open water", "developed", "forest, scrub", "herbaceouse, pasture", "wetlands"))
- 
- 
+hab_names <- read.csv(here("data/habitat_names_groups.csv"))
+
+rcl <- cbind(hab_names$Value, 
+             hab_names$habitat.num) 
+
+
+
 lc <- reclassify(land_cover, rcl, right = NA) 
-names(lc) <- "land_cover" 
+names(lc) <- "land.cover" 
 
 
 
@@ -65,7 +68,6 @@ greg_track <- greg_gps_day %>%
 
 gregs <- read.csv(here("data/gregs.csv"))
 
-zz <- make_combined_data("GREG_1")
 
 greg_tracks <- map_df(gregs$bird, make_combined_data) 
 
