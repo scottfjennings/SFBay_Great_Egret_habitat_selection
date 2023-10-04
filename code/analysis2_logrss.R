@@ -21,7 +21,18 @@ gregs <- read.csv(here("data/gregs.csv")) %>%
 
 # read data; from analysis_1_prep_data.R ----
 # add human readable habitat names and clean
-greg_steps_habitat <- readRDS(here("model_objects/amt_bursts/greg_tracks_10min")) %>% 
+
+# with only end habitat values
+greg_steps_habitat <- readRDS(here("model_objects/amt_bursts/greg_tracks_30min")) %>% 
+  right_join(gregs) %>% 
+  full_join(., read.csv(here("data/habitat_names_groups.csv")) %>% dplyr::select(habitat.name, "land.cover" = habitat.num) %>% distinct()) %>% 
+  filter(!is.na(habitat.name), habitat.name != "Other") %>% 
+  #mutate(habitat.name = ifelse(habitat.name %in% c("Forest", "Scrub"), "Woody", habitat.name)) %>% 
+  mutate(habitat.name = as.factor(habitat.name),
+         habitat.name = relevel(habitat.name, "Open Water"))
+
+# with start and end habitat values
+greg_steps_habitat <- readRDS(here("model_objects/amt_bursts/greg_tracks_30min")) %>% 
   full_join(., read.csv(here("data/habitat_names_groups.csv")) %>% dplyr::select(habitat.name.start = habitat.name, habitat.start = Value)) %>% 
   full_join(., read.csv(here("data/habitat_names_groups.csv")) %>% dplyr::select(habitat.name.end = habitat.name, habitat.end = Value)) %>% 
   filter(habitat.name.end != "Other") %>% 
@@ -35,18 +46,22 @@ greg_steps_habitat <- readRDS(here("model_objects/amt_bursts/greg_tracks_10min")
 
 #summary(greg_steps_habitat)
 # mean step length and turn angle in greg_steps_habitat
-newdat_sl_ = 109
+newdat_sl_ = 332
 newdat_cos_ta_ = 0
 
 # check number of points per bird per habitat
 greg_steps_habitat %>% 
   data.frame() %>% 
-  #filter(case_ == TRUE) %>% 
+  filter(case_ == TRUE) %>% 
   right_join(gregs) %>% 
-  group_by(bird, habitat.name.end) %>% 
+#  group_by(bird, habitat.name.end) %>%
+  group_by(bird, habitat.name) %>% 
   summarise(nbird = n()) %>% 
   ungroup() %>% 
-  pivot_wider(id_cols = "bird", names_from = "habitat.name.end", values_from = "nbird") %>% view()
+#  pivot_wider(id_cols = "bird", names_from = "habitat.name.end", values_from = "nbird") %>% 
+  pivot_wider(id_cols = "bird", names_from = "habitat.name", values_from = "nbird") %>% 
+  left_join(read.csv(here("data/gregs.csv"))) %>% 
+  view()
 
 
 
@@ -63,16 +78,18 @@ greg_steps_habitat %>%
 # habitat - does relative selection differ between habitats?
 fit_hab <- function(zbird) {
 hab <- greg_steps_habitat %>% 
+  mutate(cos_ta_ = cos(ta_),
+         log_sl_ = log(sl_)) %>% 
   filter(bird == zbird) %>% 
-  fit_issf(case_ ~ habitat.name.end + 
+  fit_issf(case_ ~ habitat.name + 
              sl_ + log_sl_ + cos_ta_ + 
              strata(step_id_), model = TRUE)
 
-# 
-saveRDS(hab, paste("model_objects/fitted/", zbird, "_hab", sep = ""))
+# saveRDS(hab, paste("model_objects/fitted/", zbird, "_hab", sep = ""))
+return(hab)
 }
 
-#fit_hab("GREG_20")
+# zz <- fit_hab("GREG_2")
 
 # save it as an object so errors can be examined
 fitted_hab <- map(gregs$bird, safely(fit_hab))
