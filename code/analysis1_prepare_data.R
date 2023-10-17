@@ -39,9 +39,13 @@ names(lc) <- "land.cover"
 # hab_names_df %>% filter(Legend != "") %>% write.csv(here("data/habitat_names_groups.csv"), row.names = FALSE)
 # GREG GPS data ----
 greg_gps_day <- readRDS("C:/Users/scott.jennings/OneDrive - Audubon Canyon Ranch/Projects/core_monitoring_research/hetp/hetp_data_work/data_files/GPS_with_covariates/gps_with_covariates") %>% 
-  rename("bird" = individual.local.identifier) %>% 
-  filter(inlight == TRUE, ground.speed <= 5, !grepl("SNEG", bird), utm.zone == "10N")
+  rename("bird" = individual.local.identifier) %>%
+  full_join(read.csv("C:/Users/scott.jennings/OneDrive - Audubon Canyon Ranch/Projects/core_monitoring_research/hetp/hetp_data_work/data_files/bird_last_dates.csv")) %>%  
+  mutate(last.date.moved = mdy(last.date.moved)) %>% 
+  filter(inlight == TRUE, ground.speed <= 5, !grepl("SNEG", bird), utm.zone == "10N", date < last.date.moved - 3)
 
+
+greg_gps_day %>% count(bird) %>% view()
 
 
 # make tracks, assign habitat values to GPS points ----
@@ -66,10 +70,33 @@ greg_track <- greg_gps_day %>%
 
 # distinct(greg_gps_day, bird) %>% separate(bird, into = c("spp", "num"), remove = FALSE) %>% mutate(num = as.numeric(num), wild.rehab = ifelse(num <= 11, "wild", "rehab")) %>% dplyr::select(bird, wild.rehab) %>% write.csv(here("data/gregs.csv"), row.names = FALSE)
 
-gregs <- read.csv(here("data/gregs.csv"))
+gregs <- read.csv(here("data/gregs.csv")) %>% 
+  right_join(distinct(greg_gps_day, bird))
+
+
+greg_tracks <- map(gregs$bird, safely(make_combined_data)) 
 
 
 greg_tracks <- map_df(gregs$bird, make_combined_data) 
+
+
+zz <- greg_tracks %>% 
+  data_frame() %>% 
+  filter(case_ == TRUE) %>% 
+  mutate(date = as.Date(t2_, tz = "America/Los_Angeles")) %>% 
+  group_by(bird) %>% 
+  mutate(max.date = max(date)) %>% 
+  filter(date >= max.date - 30) %>% 
+  ungroup() %>% 
+  #group_by(bird, date, max.date) %>% 
+  #summarise(mean.sl = mean(sl_)) %>% 
+  #ungroup() %>% 
+  mutate(countdown = -1 * as.numeric(max.date - date))
+
+ggplot(zz) +
+  geom_boxplot(aes(x = factor(countdown), y = sl_, color = bird)) +
+  facet_wrap(~bird)
+
 
 
 save_bird_nldc <- function(zbird) {
@@ -110,7 +137,7 @@ greg_tracks %>%
 # drop_na() strips amt formatting/classes from object, filter(!is.na()), maintains amt structure
 greg_tracks <- greg_tracks %>% 
   #filter(!is.na(habitat.start)) %>% 
-  filter(!is.na(land_cover)) %>% 
+  filter(!is.na(land.cover)) %>% 
   mutate(cos_ta_ = cos(ta_),
          log_sl_ = log(sl_))
 
